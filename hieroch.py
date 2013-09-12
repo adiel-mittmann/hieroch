@@ -31,7 +31,7 @@ class cli:
                 except cio.PreviousException:
                     pass
                 except Exception as e:
-                    self.cio.writeln(e)
+                    self.cio.writeln(str(e))
             self.db.save()
             if quit:
                 break
@@ -269,7 +269,7 @@ class cli:
         elif unit_spec == 'm':
             unit_spec = 'km'
             rate = rate * 1000
-        rate = "{:03.2f}/{}".format(rate, unit_spec)
+        rate = "{0:03.2f}/{1}".format(rate, unit_spec)
         spec = self.format_package_raw(price['product_name'], price['product_extra'], price['package_extra'], price['brand_name'], price['package_amount'], price['product_unit'])
         
         if highlight:
