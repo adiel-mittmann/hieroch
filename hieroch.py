@@ -48,10 +48,10 @@ class cli:
             self.set_origin(1)
         elif cmd == "p":
             self.add_package_price(1)
-        elif cmd == "v":
-            self.view_prices_for_product(1)
         elif cmd == "w":
             self.view_prices_for_package(1)
+        elif cmd == "x":
+            self.view_prices(1)
         elif cmd == "check":
             self.run_checks()
         elif cmd == "q":
@@ -121,16 +121,24 @@ class cli:
         if product == None:
             product = self.db.get_product_by_id(package['product_id'])
 
-        s = product['name']
-        if product['extra'] != "":
-            s = s + " " + product['extra']
-        if package['extra'] != "":
-            s = s + " " + package['extra']
+        brand_name = ""
         if package['brand_id'] != 0:
-            s = s + " " + self.db.get_brand_by_id(package['brand_id'])['name']
-        s = s + " " + str(package['amount']) + " " +  model.unit_by_no(product['unit'])
+            brand_name = self.db.get_brand_by_id(package['brand_id'])['name']
+
+        return self.format_package_raw(product['name'], product['extra'], package['extra'], brand_name, package['amount'], product['unit'])
+
+    def format_package_raw(self, product_name, product_extra, package_extra, brand_name, package_amount, product_unit):
+        s = product_name
+        if product_extra != "":
+            s = s + " " + product_extra
+        if package_extra != "":
+            s = s + " " + package_extra
+        if brand_name != "":
+            s = s + " " + brand_name
+        s = s + " " + str(package_amount) + "" +  model.unit_by_no(product_unit)
 
         return s
+
 
     def format_product(self, product):
         s = product['name']
@@ -215,7 +223,9 @@ class cli:
         package, price = self.read_form(level, options)
         price = self.db.insert_price(self.store_id, package['id'], price, self.today, self.origin_no)
 
-        self.print_prices_for_package(package)
+        filter_specs = [{'field': 'product_id', 'match': 'exact', 'value': package['product_id']}]
+        prices = self.db.get_prices_with_filter(filter_specs)
+        self.print_best_price_summary(prices, price['id'])
 
         return price
 
@@ -247,46 +257,69 @@ class cli:
         self.cio.print_status(level, "Today is %s." % (self.today,))
         return self.today
 
-    def print_prices_for_product(self, product_id):
-        product  = self.db.get_product_by_id(product_id)
-        packages = self.db.get_packages_by_product_id(product_id)
-        for package in packages:
-            self.print_prices_for_package(package, product)
+    def print_price(self, price, highlight):
+        rate = price['price'] / 100.0 / price['package_amount']
+        unit_spec = model.unit_by_no(price['product_unit'])
+        if  unit_spec == 'g':
+            unit_spec = 'kg'
+            rate = rate * 1000
+        elif unit_spec == 'ml':
+            unit_spec = 'l'
+            rate = rate * 1000
+        elif unit_spec == 'm':
+            unit_spec = 'km'
+            rate = rate * 1000
+        rate = "{:03.2f}/{}".format(rate, unit_spec)
+        spec = self.format_package_raw(price['product_name'], price['product_extra'], price['package_extra'], price['brand_name'], price['package_amount'], price['product_unit'])
+        
+        if highlight:
+            self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_BLUE, self.cio.COLOR_BLACK)
 
-    def print_prices_for_package(self, package, product = None):
-        if product == None:
-            product = self.db.get_product_by_id(package['product_id'])
-        prices = self.db.get_prices_by_package(package['id'])
+        self.cio.write("{0:<8} {1:>3}d {2:<13} {3}".format(rate, (datetime.date.today() - price['date']).days, price['store_name'], spec))
 
-        self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_BLUE, self.cio.COLOR_BLACK)
-        self.cio.writeln(self.format_package(package))
-
-        for price in prices:
-            value     = price['price'] / 100.0
-            rate      = value / package['amount']
-            unit_spec = model.unit_by_no(product['unit'])
-
-            if  unit_spec == 'g':
-                unit_spec = 'kg'
-                rate = rate * 1000
-            elif unit_spec == 'ml':
-                unit_spec = 'l'
-                rate = rate * 1000
-            elif unit_spec == 'm':
-                unit_spec = 'km'
-                rate = rate * 1000
-
-            self.cio.text_color(self.cio.ATTR_RESET, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
-            self.cio.write("%.2f/%s\t" % (rate, unit_spec))
-
+        if highlight:
             self.cio.text_color(self.cio.ATTR_RESET, self.cio.COLOR_WHITE, self.cio.COLOR_BLACK)
-            self.cio.write("%s\t" % (self.db.get_store_by_id(price['store_id'])['name'],))
-            self.cio.write("%s\n" % (str(price['date']),))
 
-    def view_prices_for_product(self, level):
-        self.print_prices_for_product(self.choose_product(level)['id'])
+        self.cio.write("\n")
+
+    def print_best_price_summary(self, prices, highlight_id = None):
+        minimum = float("inf")
+        selected = []
+        for price in reversed(prices):
+            rate = price['price'] / 100.0 / price['package_amount']
+            append = False
+            if rate < minimum:
+                append = True
+                minimum = rate
+            elif price['id'] == highlight_id:
+                append = True
+            if append:
+                selected.append(price)
+
+        for price in reversed(selected):
+            self.print_price(price, price['id'] == highlight_id)
 
     def view_prices_for_package(self, level):
-        self.print_prices_for_package(self.choose_package(level))
+        package = self.choose_package(level)
+        filter_specs = [{'field': 'package_id', 'match': 'exact', 'value': package['id']}]
+        prices = self.db.get_prices_with_filter(filter_specs)
+        self.print_best_price_summary(prices)
 
+    def view_prices(self, level):
+        self.cio.print_status(level, "Checking prices.")
+        options = []
+        options.append({'type': 'string', 'question': "~Product name.",  'null': True})
+        options.append({'type': 'string', 'question': "~Product extra.", 'null': True})
+        options.append({'type': 'string', 'question': "~Package extra.", 'null': True})
+        options.append({'type': 'string', 'question': "~Brand name.",   'null': True})
+        fields = ['product_name', 'product_extra', 'package_extra', 'brand_name']
+        values = self.read_form(level, options)
+        filter_specs = []
+        for i in range(len(fields)):
+            if values[i] != None:
+                filter_specs.append({'field': fields[i], 'match': 'fuzzy', 'value': values[i]})
+
+        prices = self.db.get_prices_with_filter(filter_specs)
+        self.print_best_price_summary(prices)
+        
 cli().run()

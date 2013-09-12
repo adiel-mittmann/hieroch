@@ -28,7 +28,7 @@ def unit_by_no(no):
     if no < 1:
         return None
     try:
-        return ['kg', 'g', 'l', 'ml', 'u', 'm', "m2"][no - 1]
+        return ['kg', 'g', 'L', 'ml', 'u', 'm', "m2"][no - 1]
     except:
         return None
 
@@ -142,6 +142,58 @@ class Database:
     def get_prices_by_package(self, package_id):
         rows = self.cursor.execute('SELECT prices.id, prices.store_id, prices.package_id, prices.price, prices.date, prices.origin FROM prices JOIN packages ON prices.package_id = packages.id WHERE prices.package_id = ? ORDER BY date', (package_id,)).fetchall()
         rows = [self.make_object(self.PRICE_COLUMNS, row) for row in rows]
+        for row in rows:
+            s = row['date']
+            row['date'] = datetime.date(int(s[0:4]), int(s[5:7]), int(s[8:10]))
+        return rows
+
+    def get_prices_with_filter(self, filter_specs = None):
+
+        where  = "1"
+        params = []
+        if filter_specs != None:
+            for filter_spec in filter_specs:
+                if filter_spec['match'] == 'fuzzy':
+                    where += " AND " + filter_spec['field'] + " LIKE ?"
+                    params.append("%" + filter_spec['value'] + "%")
+                else:
+                    where += " AND " + filter_spec['field'] + " = ?"
+                    params.append(filter_spec['value'])
+
+        sql = """SELECT pro.name AS product_name,
+                        pro.extra AS product_extra,
+                        pro.unit AS product_unit,
+                        bra.name AS brand_name,
+                        pac.extra AS package_extra,
+                        pac.amount AS package_amount,
+                        pac.barcode AS package_barcode,
+                        sto.name AS store_name,
+                        pri.price AS price,
+                        pri.date AS date,
+                        pri.id AS id,
+                        pac.id AS package_id,
+                        pro.id AS product_id
+                 FROM (((prices pri JOIN packages pac ON pri.package_id = pac.id)
+                                    JOIN products pro ON pac.product_id = pro.id)
+                                    JOIN brands bra ON pac.brand_id = bra.id)
+                                    JOIN stores sto ON pri.store_id = sto.id
+                 WHERE %s
+                 ORDER BY date
+              """ % (where,)
+        rows = self.cursor.execute(sql, params)
+
+        rows = [{'product_name':    row[0],
+                 'product_extra':   row[1],
+                 'product_unit':    row[2],
+                 'brand_name':      row[3],
+                 'package_extra':   row[4],
+                 'package_amount':  row[5],
+                 'package_barcode': row[6],
+                 'store_name':      row[7],
+                 'price':           row[8],
+                 'date':            row[9],
+                 'id':              row[10]}
+                for row in rows]
         for row in rows:
             s = row['date']
             row['date'] = datetime.date(int(s[0:4]), int(s[5:7]), int(s[8:10]))
