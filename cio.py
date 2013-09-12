@@ -1,6 +1,7 @@
 import sys
 import datetime, time
 import model
+import debug
 
 class CancelException(Exception):
     pass
@@ -14,9 +15,10 @@ class NewException(Exception):
 class cio:
 
     def print_prompt(self, level, question):
-        if question != None:
-            print("  " * level + "! " + question)
-        sys.stdout.write("  " * level + "> ")
+        if not debug.BATCH:
+            if question != None:
+                print("  " * level + "! " + question)
+            sys.stdout.write("  " * level + "> ")
         sys.stdout.flush()
 
     def read_line(self, level, question = None, new = False, previous = False):
@@ -134,7 +136,8 @@ class cio:
         return float(eval(t))
 
     def print_status(self, level, status):
-        print("  " * level + "= %s" %(status))
+        if not debug.BATCH:
+            print("  " * level + "= %s" %(status))
 
     def print_error(self, level, message):
         print("  " * level + "* " + message)
