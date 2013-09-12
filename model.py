@@ -178,7 +178,7 @@ class Database:
                                     JOIN brands bra ON pac.brand_id = bra.id)
                                     JOIN stores sto ON pri.store_id = sto.id
                  WHERE %s
-                 ORDER BY date
+                 ORDER BY pri.date, pri.price / pac.amount DESC
               """ % (where,)
         rows = self.cursor.execute(sql, params)
 
@@ -192,7 +192,9 @@ class Database:
                  'store_name':      row[7],
                  'price':           row[8],
                  'date':            row[9],
-                 'id':              row[10]}
+                 'id':              row[10],
+                 'package_id':      row[11],
+                 'product_id':      row[12]}
                 for row in rows]
         for row in rows:
             s = row['date']
