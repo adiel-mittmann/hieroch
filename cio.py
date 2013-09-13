@@ -117,12 +117,12 @@ class cio:
             if k == 0:
                 if c >= "0" and c <= "9":
                     k = 1
-                if c == ".":
+                elif c == ".":
                     k = 2
             elif k == 1:
                 if c == ".":
                     k = 2
-                if c < "0" or c > "9":
+                elif c < "0" or c > "9":
                     t = t + "."
                     k = 0
             elif k == 2:
@@ -132,6 +132,8 @@ class cio:
 
         if k == 1:
             t = t + "."
+
+        print t
 
         return float(eval(t))
 
