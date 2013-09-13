@@ -133,8 +133,6 @@ class cio:
         if k == 1:
             t = t + "."
 
-        print t
-
         return float(eval(t))
 
     def print_status(self, level, status):
