@@ -272,12 +272,12 @@ class cli:
         rate = "{0:03.2f}/{1}".format(rate, unit_spec)
         spec = self.format_package_raw(price['product_name'], price['product_extra'], price['package_extra'], price['brand_name'], price['package_amount'], price['product_unit'])
         
-        if price.has_key('highlight'):
-            if price.has_key('good'):
+        if 'highlight' in price:
+            if 'good' in price:
                 self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_CYAN, self.cio.COLOR_BLACK)
             else:
                 self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_BLUE, self.cio.COLOR_BLACK)
-        elif price.has_key('good'):
+        elif 'price' in price:
             self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
 
         self.cio.write("{0:<8} {1:>3}d {2:<13} {3}".format(rate, (datetime.date.today() - price['date']).days, price['store_name'], spec))

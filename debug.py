@@ -3,9 +3,9 @@ BATCH       = False
 
 try:
     import os
-    if os.environ.has_key('DEBUG'):
+    if 'DEBUG' in os.environ:
         DEBUG = True
-    if os.environ.has_key('BATCH'):
+    if 'BATCH' in os.environ:
         BATCH = True
 except:
     pass
