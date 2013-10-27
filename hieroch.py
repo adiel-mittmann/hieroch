@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*- 
-
 import sys
 import datetime, time
 import cio
@@ -96,9 +94,7 @@ class cli:
     def run_checks(self):
 
         def multiply(s, package_unit):
-            s = s.decode('utf8') + " "
-            if s.find(u"×") == -1:
-                return None
+            s = s + " "
             i = 0
             a = 0
             nums = []
@@ -114,12 +110,15 @@ class cli:
                 elif a == 1:
                     if   c == " ":
                         nums.append([snum, sunit])
-                        a = 0
+                        a = 2
                     else:
                         if (c >= '0' and c <= '9') or c == '.':
                             snum += c
                         else:
                             sunit += c
+                elif a == 2:
+                    if   c == " ":
+                        a = 0
                 i += 1
             if len(nums) > 1:
                 value = 1.0
@@ -373,7 +372,7 @@ class cli:
         self.cio.print_status(level, "Today is %s." % (self.today,))
         return self.today
 
-    def format_price(self, price, discarded_count = 0):
+    def format_price(self, price, discarded_count = 0, multiline = False):
         s = ""
 
         rate = price['price'] / 100.0 / price['package_amount']
@@ -391,18 +390,45 @@ class cli:
         spec = self.format_package_raw(price['product_name'], price['product_extra'], price['package_extra'], price['brand_name'], price['package_amount'], price['product_unit'])
 
         ago = (datetime.date.today() - price['date']).days
-        if   ago < 30:
-            ago = "{0:>3}d".format(ago)
-        elif ago < 365:
-            ago = "{0:02.1f}m".format(ago / 30.0)
+        if   ago <= 90:
+            ago = "{0:>2}d".format(ago)
+        elif ago <= (36 * 30):
+            ago = "{0:2.0f}m".format(ago / 30.0)
         else:
-            ago = "{0:02.1f}y".format(ago / 365.0)
+            ago = "{0:2.0f}y".format(ago / 365.0)
 
-        s += "{0:>3} {1:<8} {2:>3} {3:<13} {4}".format(discarded_count, rate, ago, price['store_name'], spec)
+        if   discarded_count == 0:
+            discarded_count = "  "
+        elif discarded_count < 99:
+            discarded_count = "{0:>2}".format(discarded_count)
+        else:
+            discarded_count = "++"
 
+        store_name = price['store_name'][0:3]
+
+        s += "{0} {1:>8} {2} {3:<3} ".format(discarded_count, rate, ago, store_name)
+        if not multiline:
+            s += spec
+            return s
+
+        cols = self.cio.columns()
+        len_s = cio.utf8_len(s)
+        len_spec = cio.utf8_len(spec)
+        if (len_s >= cols) or (len_s + len_spec <= cols):
+            s += spec
+        else:
+            left = len_s
+            rem = cols - len_s
+            first = True
+            while cio.utf8_len(spec) > 0:
+                if not first:
+                    s += "\n" + (" " * left)
+                first = False
+                trunc, spec = cio.utf8_break(spec, rem)
+                s += trunc
         return s
 
-    def print_price(self, price, discarded_count):
+    def print_price(self, price, discarded_count, multiline = False):
         if 'highlight' in price:
             if 'good' in price:
                 self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_CYAN, self.cio.COLOR_BLACK)
@@ -410,7 +436,7 @@ class cli:
                 self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_BLUE, self.cio.COLOR_BLACK)
         elif 'price' in price:
             self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
-        self.cio.write(self.format_price(price, discarded_count))
+        self.cio.write(self.format_price(price, discarded_count, multiline))
         self.cio.text_color(self.cio.ATTR_RESET, self.cio.COLOR_WHITE, self.cio.COLOR_BLACK)
         self.cio.write("\n")
 
@@ -437,7 +463,7 @@ class cli:
                 selected[-1][1] += 1
 
         for price, discarded_count in reversed(selected):
-            self.print_price(price, discarded_count)
+            self.print_price(price, discarded_count, multiline = True)
 
 #            self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
 #        self.cio.write("{0:<8} {1:>3}d {2:<13} {3}".format(rate, (datetime.date.today() - price['date']).days, price['store_name'], spec))

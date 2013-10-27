@@ -12,6 +12,37 @@ class PreviousException(Exception):
 class NewException(Exception):
     pass
 
+def utf8_len(s):
+    result = 0
+    for i in range(len(s)):
+        if ord(s[i]) & 0xc0 != 0x80:
+            result += 1
+    return result
+
+def utf8_break(s, n):
+    result = ""
+    more   = ""
+    rest   = ""
+    for i in range(len(s)):
+        if ord(s[i]) & 0xc0 != 0x80:
+            if   n == 0:
+                rest = more + s[i:]
+                break
+            elif s[i] == " ":
+                if result != "":
+                    result += " "
+                result += more
+                more = ""
+            else:
+                more += s[i]
+            n -= 1
+        else:
+            more += s[i]
+    if result == "":
+        result = more
+        rest = ""
+    return result, rest
+
 class cio:
 
     def print_prompt(self, level, question):
@@ -170,3 +201,12 @@ class cio:
 
     def writeln(self, s, level = 0):
         print("  " * level + s)
+
+    def dimensions(self):
+        import fcntl
+        import termios
+        result = fcntl.ioctl(1, termios.TIOCGWINSZ, "\0\0\0\0\0\0\0\0")
+        return ord(result[2]), ord(result[0])
+
+    def columns(self):
+        return self.dimensions()[0]
