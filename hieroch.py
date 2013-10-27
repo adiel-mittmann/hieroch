@@ -372,7 +372,7 @@ class cli:
         self.cio.print_status(level, "Today is %s." % (self.today,))
         return self.today
 
-    def format_price(self, price, discarded_count = 0, multiline = False):
+    def format_price(self, price, multiline = False):
         s = ""
 
         rate = price['price'] / 100.0 / price['package_amount']
@@ -397,6 +397,9 @@ class cli:
         else:
             ago = "{0:2.0f}y".format(ago / 365.0)
 
+        discarded_count = 0
+        if price.has_key('discarded_count'):
+            discarded_count = price['discarded_count']
         if   discarded_count == 0:
             discarded_count = "  "
         elif discarded_count < 99:
@@ -428,15 +431,14 @@ class cli:
                 s += trunc
         return s
 
-    def print_price(self, price, discarded_count, multiline = False):
-        if 'highlight' in price:
-            if 'good' in price:
-                self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_CYAN, self.cio.COLOR_BLACK)
-            else:
-                self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_BLUE, self.cio.COLOR_BLACK)
+    def print_price(self, price, multiline = False):
+        if   'highlight' in price:
+            self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_BLUE, self.cio.COLOR_BLACK)
+        elif 'good' in price:
+            self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_CYAN, self.cio.COLOR_BLACK)
         elif 'price' in price:
             self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
-        self.cio.write(self.format_price(price, discarded_count, multiline))
+        self.cio.write(self.format_price(price, multiline))
         self.cio.text_color(self.cio.ATTR_RESET, self.cio.COLOR_WHITE, self.cio.COLOR_BLACK)
         self.cio.write("\n")
 
@@ -458,15 +460,13 @@ class cli:
                 append = True
             packages.add(price['package_id'])
             if append:
-                selected.append([price, 0])
+                price['discarded_count'] = 0
+                selected.append(price)
             else:
-                selected[-1][1] += 1
+                selected[-1]['discarded_count'] += 1
 
-        for price, discarded_count in reversed(selected):
-            self.print_price(price, discarded_count, multiline = True)
-
-#            self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
-#        self.cio.write("{0:<8} {1:>3}d {2:<13} {3}".format(rate, (datetime.date.today() - price['date']).days, price['store_name'], spec))
+        for price in reversed(selected):
+            self.print_price(price, multiline = True)
 
     def view_prices_for_package(self, level):
         package = self.choose_package(level)
