@@ -87,7 +87,7 @@ class Database:
     def generic_insert(self, table, columns, values):
         some_columns = columns[:]
         some_columns.remove("id")
-        some_columns.remove("id")
+        some_columns.remove("hide")
         sql = 'INSERT INTO {0}({1}) VALUES({2})'.format(table, self.make_column_list(some_columns), self.placeholders(len(values)))
         self.cursor.execute(sql, values)
         return self.make_object(columns, [self.cursor.lastrowid, 0] + list(values))
