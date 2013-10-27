@@ -59,11 +59,11 @@ class Database:
     def save(self):
         self.db.commit()
 
-    BRAND_COLUMNS   = ['id', 'name']
-    STORE_COLUMNS   = ['id', 'name']
-    PRODUCT_COLUMNS = ['id', 'name', 'extra', 'unit']
-    PACKAGE_COLUMNS = ['id', 'product_id', 'brand_id', 'extra', 'amount', 'barcode']
-    PRICE_COLUMNS   = ['id', 'store_id', 'package_id', 'price', 'date', 'origin']
+    BRAND_COLUMNS   = ['id', 'hide', 'name']
+    STORE_COLUMNS   = ['id', 'hide', 'name']
+    PRODUCT_COLUMNS = ['id', 'hide', 'name', 'extra', 'unit']
+    PACKAGE_COLUMNS = ['id', 'hide', 'product_id', 'brand_id', 'extra', 'amount', 'barcode']
+    PRICE_COLUMNS   = ['id', 'hide', 'store_id', 'package_id', 'price', 'date', 'origin', 'sic']
 
     def make_object(self, columns, values):
         object = {}
@@ -71,19 +71,62 @@ class Database:
             object[columns[i]] = values[i]
         return object
 
+    def make_column_list(self, columns, prefix = None):
+        s = ""
+        for column in columns:
+            if s != "":
+                s += ", "
+            if prefix != None:
+                s += prefix + "."
+            s += column
+        return s
+
+    def placeholders(self, count):
+        return ', '.join((['?'] * count))
+
+    def generic_insert(self, table, columns, values):
+        some_columns = columns[:]
+        some_columns.remove("id")
+        some_columns.remove("id")
+        sql = 'INSERT INTO {0}({1}) VALUES({2})'.format(table, self.make_column_list(some_columns), self.placeholders(len(values)))
+        self.cursor.execute(sql, values)
+        return self.make_object(columns, [self.cursor.lastrowid, 0] + list(values))
+
+    def generic_select(self, table, columns, values = (), suffix = None, first = False):
+        if suffix == None:
+            suffix = ""
+        sql = 'SELECT {0} FROM {1} {2}'.format(self.make_column_list(columns), table, suffix)
+        rows = self.cursor.execute(sql, values).fetchall()
+        if first:
+            return self.make_object(columns, rows[0])
+        else:
+            return [self.make_object(columns, row) for row in rows]
+
+    def generic_get_by_id(self, table, columns, id):
+        return self.generic_select(table, columns, suffix = "WHERE id = ?", values = (id,), first = True)
+
+    def generic_get_recent(self, table, columns, count):
+        return self.generic_select(table, columns, suffix = "ORDER BY id DESC LIMIT ?", values = (count,))
+
+    def generic_get_hidden(self, table, columns):
+        return self.generic_select(table, columns, suffix = "WHERE hide = 1")
+
+    def generic_delete(self, table, id):
+        self.cursor.execute('DELETE FROM ' + table + ' WHERE id = ?', (id,))
+
+    def generic_toggle_hide_store(self, table, id):
+        self.cursor.execute('UPDATE ' + table + ' SET hide = 1 - hide WHERE id = ?', (id,))
+
     def insert_brand(self, name):
-        self.cursor.execute('INSERT INTO brands(name) VALUES(?)', (name,))
-        return self.make_object(self.BRAND_COLUMNS, [self.cursor.lastrowid, name])
+        return self.generic_insert('brands', self.BRAND_COLUMNS, (name,))
 
     def insert_store(self, name):
-        self.cursor.execute('INSERT INTO stores(name) VALUES(?)', (name,))
-        return self.make_object(self.STORE_COLUMNS, [self.cursor.lastrowid, name])
+        return self.generic_insert('stores', self.STORE_COLUMNS, (name,))
 
     def insert_product(self, name, extra, unit_no):
         if extra == None:
             extra = ""
-        self.cursor.execute('INSERT INTO products(name, extra, unit) VALUES(?, ?, ?)', (name, extra, unit_no))
-        return self.make_object(self.PRODUCT_COLUMNS, [self.cursor.lastrowid, name, extra, unit_no])
+        return self.generic_insert('products', self.PRODUCT_COLUMNS, (name, extra, unit_no))
 
     def insert_package(self, product_id, brand_id, extra, amount, barcode):
         if extra == None:
@@ -92,62 +135,28 @@ class Database:
             brand_id = 0
         if amount == None:
             amount = 1
-        self.cursor.execute('INSERT INTO packages(product_id, brand_id, extra, amount, barcode) VALUES(?, ?, ?, ?, ?)', (product_id, brand_id, extra, amount, barcode))
-        return self.make_object(self.PACKAGE_COLUMNS, [self.cursor.lastrowid, product_id, brand_id, extra, amount, barcode])
+        return self.generic_insert('packages', self.PACKAGE_COLUMNS, (product_id, brand_id, extra, amount, barcode))
 
     def insert_price(self, store_id, package_id, price, date, origin_no):
-        self.cursor.execute('INSERT INTO prices(store_id, package_id, price, date, origin) VALUES(?, ?, ?, ?, ?)', (store_id, package_id, price, date, origin_no))
-        return self.make_object(self.PRICE_COLUMNS, [self.cursor.lastrowid, store_id, package_id, price, date, origin_no])
-
-    def get_brand_by_name(self, pattern):
-        rows = self.cursor.execute('SELECT id, name FROM brands WHERE name LIKE ?', ("%%%s%%" % pattern,)).fetchall()
-        return [self.make_object(self.BRAND_COLUMNS, row) for row in rows]
-
-    def get_brand_by_id(self, id):
-        row = self.cursor.execute('SELECT id, name FROM brands WHERE id = ?', (id,)).fetchall()[0]
-        return self.make_object(self.BRAND_COLUMNS, row)
-
-    def get_store_by_name(self, pattern):
-        rows = self.cursor.execute('SELECT id, name FROM stores WHERE name LIKE ?', ("%%%s%%" % pattern,)).fetchall()
-        return [self.make_object(self.STORE_COLUMNS, row) for row in rows]
-
-    def get_store_by_id(self, id):
-        row = self.cursor.execute('SELECT id, name FROM stores WHERE id = ?', (id,)).fetchall()[0]
-        return self.make_object(self.STORE_COLUMNS, row)
-
-    def get_product_by_name(self, pattern):
-        rows = self.cursor.execute('SELECT id, name, extra, unit FROM products WHERE name LIKE ?', ("%%%s%%" % pattern,)).fetchall()
-        return [self.make_object(self.PRODUCT_COLUMNS, row) for row in rows]
-
-    def get_product_by_id(self, id):
-        row = self.cursor.execute('SELECT id, name, extra, unit FROM products WHERE id = ?', (id,)).fetchall()[0]
-        return self.make_object(self.PRODUCT_COLUMNS, row)
-
-    def get_package_by_barcode(self, pattern):
-        rows = self.cursor.execute('SELECT id, product_id, brand_id, extra, amount, barcode FROM packages WHERE barcode LIKE ?', ('%%%s%%' % pattern,)).fetchall()
-        return [self.make_object(self.PACKAGE_COLUMNS, row) for row in rows]
+        return self.generic_insert('prices', self.PRICE_COLUMNS, (store_id, package_id, price, date, origin_no, None))
 
     def get_package_by_product_name(self, pattern):
-        rows = self.cursor.execute('SELECT packages.id, packages.product_id, packages.brand_id, packages.extra, packages.amount, packages.barcode FROM packages JOIN products ON packages.product_id = products.id WHERE products.name LIKE ?', ('%%%s%%' % pattern,)).fetchall()
+        rows = self.cursor.execute('SELECT ' + self.make_column_list(self.PACKAGE_COLUMNS, 'packages') + ' FROM packages JOIN products ON packages.product_id = products.id WHERE products.name LIKE ?', ('%%%s%%' % pattern,)).fetchall()
         return [self.make_object(self.PACKAGE_COLUMNS, row) for row in rows]
 
     def get_packages_by_product_id(self, product_id):
-        rows = self.cursor.execute('SELECT packages.id, packages.product_id, packages.brand_id, packages.extra, packages.amount, packages.barcode FROM packages JOIN products ON packages.product_id = products.id WHERE products.id = ?', (product_id,)).fetchall()
-        return [self.make_object(self.PACKAGE_COLUMNS, row) for row in rows]
-
-    def get_packages(self):
-        rows = self.cursor.execute('SELECT id, product_id, brand_id, extra, amount, barcode FROM packages').fetchall()
+        rows = self.cursor.execute('SELECT ' + self.make_column_list(self.PACKAGE_COLUMNS, 'packages') + ' FROM packages JOIN products ON packages.product_id = products.id WHERE products.id = ?', (product_id,)).fetchall()
         return [self.make_object(self.PACKAGE_COLUMNS, row) for row in rows]
 
     def get_prices_by_package(self, package_id):
-        rows = self.cursor.execute('SELECT prices.id, prices.store_id, prices.package_id, prices.price, prices.date, prices.origin FROM prices JOIN packages ON prices.package_id = packages.id WHERE prices.package_id = ? ORDER BY date', (package_id,)).fetchall()
+        rows = self.cursor.execute('SELECT ' + self.make_column_list(self.PRICE_COLUMNS, 'prices') + ' FROM prices JOIN packages ON prices.package_id = packages.id WHERE prices.package_id = ? ORDER BY date', (package_id,)).fetchall()
         rows = [self.make_object(self.PRICE_COLUMNS, row) for row in rows]
         for row in rows:
             s = row['date']
             row['date'] = datetime.date(int(s[0:4]), int(s[5:7]), int(s[8:10]))
         return rows
 
-    def get_prices_with_filter(self, filter_specs = None):
+    def get_prices_with_filter(self, filter_specs = None, order = None, limit = None):
 
         where  = "1"
         params = []
@@ -159,6 +168,17 @@ class Database:
                 else:
                     where += " AND " + filter_spec['field'] + " = ?"
                     params.append(filter_spec['value'])
+
+        if order != None:
+            if order == "id":
+                order = "ORDER BY id DESC"
+        else:
+            order = "ORDER BY pri.date, pri.price / pac.amount DESC"
+
+        if limit != None:
+            limit = "LIMIT {0}".format(limit)
+        else:
+            limit = ""
 
         sql = """SELECT pro.name AS product_name,
                         pro.extra AS product_extra,
@@ -172,14 +192,17 @@ class Database:
                         pri.date AS date,
                         pri.id AS id,
                         pac.id AS package_id,
-                        pro.id AS product_id
+                        pro.id AS product_id,
+                        pri.sic AS sic
                  FROM (((prices pri JOIN packages pac ON pri.package_id = pac.id)
                                     JOIN products pro ON pac.product_id = pro.id)
                                     JOIN brands bra ON pac.brand_id = bra.id)
                                     JOIN stores sto ON pri.store_id = sto.id
                  WHERE %s
-                 ORDER BY pri.date, pri.price / pac.amount DESC
-              """ % (where,)
+                 AND pri.hide = 0 AND pac.hide = 0 AND pro.hide = 0 AND bra.hide = 0 AND sto.hide = 0
+                 %s
+                 %s
+              """ % (where, order, limit)
         rows = self.cursor.execute(sql, params)
 
         rows = [{'product_name':    row[0],
@@ -194,16 +217,92 @@ class Database:
                  'date':            row[9],
                  'id':              row[10],
                  'package_id':      row[11],
-                 'product_id':      row[12]}
+                 'product_id':      row[12],
+                 'sic':             row[13]}
                 for row in rows]
         for row in rows:
             s = row['date']
             row['date'] = datetime.date(int(s[0:4]), int(s[5:7]), int(s[8:10]))
         return rows
 
-    def run_checks(self):
-        packages = self.get_packages()
-        for package in packages:
-            if package['barcode']:
-                if not is_barcode_valid(package['barcode']):
-                    self.cio.writeln("Invalid barcode for package %d: %s" % (package['id'], package['barcode']))
+    def get_brand_by_name(self, pattern):
+        return self.generic_select('brands', self.BRAND_COLUMNS, suffix = "WHERE name LIKE ?", values = ("%%%s%%" % pattern,))
+
+    def get_store_by_name(self, pattern):
+        return self.generic_select('stores', self.STORE_COLUMNS, suffix = "WHERE name LIKE ?", values = ("%%%s%%" % pattern,))
+
+    def get_product_by_name(self, pattern):
+        return self.generic_select('products', self.PRODUCT_COLUMNS, suffix = "WHERE name LIKE ?", values = ("%%%s%%" % pattern,))
+
+    def get_package_by_barcode(self, pattern):
+        return self.generic_select('packages', self.PACKAGE_COLUMNS, suffix = "WHERE barcode LIKE ?", values = ('%%%s%%' % pattern,))
+
+    def get_brand_by_id(self, id):
+        return self.generic_get_by_id('brands', self.BRAND_COLUMNS, id)
+
+    def get_store_by_id(self, id):
+        return self.generic_get_by_id('stores', self.STORE_COLUMNS, id)
+
+    def get_product_by_id(self, id):
+        return self.generic_get_by_id('products', self.PRODUCT_COLUMNS, id)
+
+    def get_package_by_id(self, id):
+        return self.generic_get_by_id('packages', self.PACKAGE_COLUMNS, id)
+
+    def get_recent_brands(self, count):
+        return self.generic_get_recent('brands', self.BRAND_COLUMNS, count)
+
+    def get_recent_stores(self, count):
+        return self.generic_get_recent('stores', self.STORE_COLUMNS, count)
+
+    def get_recent_products(self, count):
+        return self.generic_get_recent('products', self.PRODUCT_COLUMNS, count)
+
+    def get_recent_packages(self, count):
+        return self.generic_get_recent('packages', self.PACKAGE_COLUMNS, count)
+
+    def get_hidden_brands(self):
+        return self.generic_get_hidden('brands', self.BRAND_COLUMNS)
+
+    def get_hidden_stores(self):
+        return self.generic_get_hidden('stores', self.STORE_COLUMNS)
+
+    def get_hidden_products(self):
+        return self.generic_get_hidden('products', self.PRODUCT_COLUMNS)
+
+    def get_hidden_packages(self):
+        return self.generic_get_hidden('packages', self.PACKAGE_COLUMNS)
+
+    def get_all_packages(self):
+        return self.generic_select('packages', self.PACKAGE_COLUMNS)
+
+    def get_all_prices(self):
+        return self.generic_select('prices', self.PRICE_COLUMNS)
+
+    def delete_price(self, id):
+        self.generic_delete('prices', id)
+
+    def delete_package(self, id):
+        self.generic_delete('packages', id)
+
+    def delete_product(self, id):
+        self.generic_delete('products', id)
+
+    def delete_store(self, id):
+        self.generic_delete('stores', id)
+
+    def delete_brand(self, id):
+        self.generic_delete('brands', id)
+
+    def toggle_hide_store(self, id):
+        self.generic_toggle_hide_store('stores', id)
+
+    def toggle_hide_brand(self, id):
+        self.generic_toggle_hide_store('brands', id)
+
+    def toggle_hide_package(self, id):
+        self.generic_toggle_hide_store('packages', id)
+
+    def toggle_hide_product(self, id):
+        self.generic_toggle_hide_store('products', id)
+

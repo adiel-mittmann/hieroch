@@ -1,13 +1,15 @@
 DROP TABLE IF EXISTS brands;
 CREATE TABLE brands(
   id   INTEGER      PRIMARY KEY AUTOINCREMENT,
-  name VARCHAR(128) NOT NULL UNIQUE
+  name VARCHAR(128) NOT NULL UNIQUE,
+  hide INTEGER      NOT NULL DEFAULT 0
 );
 
 DROP TABLE IF EXISTS stores;
 CREATE TABLE stores(
   id   INTEGER      PRIMARY KEY AUTOINCREMENT,
-  name VARCHAR(128) NOT NULL UNIQUE
+  name VARCHAR(128) NOT NULL UNIQUE,
+  hide INTEGER      NOT NULL DEFAULT 0
 );
 
 DROP TABLE IF EXISTS products;
@@ -16,6 +18,7 @@ CREATE TABLE products(
   name  VARCHAR(128) NOT NULL,
   extra VARCHAR(128) NOT NULL DEFAULT "",
   unit  INTEGER      NOT NULL,
+  hide  INTEGER      NOT NULL DEFAULT 0
 
   UNIQUE(name, extra)
 );
@@ -28,6 +31,7 @@ CREATE TABLE packages(
   extra      VARCHAR(128) NOT NULL DEFAULT "",
   amount     REAL         NOT NULL DEFAULT 1,
   barcode    VARCHAR(32)  NULL UNIQUE,
+  hide  INTEGER      NOT NULL DEFAULT 0,
 
   UNIQUE(product_id, brand_id, extra, amount),
 
@@ -43,6 +47,8 @@ CREATE TABLE prices(
   price      INTEGER NOT NULL,
   date       DATE    NOT NULL,
   origin     INTEGER NOT NULL,
+  hide  INTEGER      NOT NULL DEFAULT 0,
+  sic   INTEGER      NULL,
 
   FOREIGN KEY(store_id)   REFERENCES stores(id),
   FOREIGN KEY(package_id) REFERENCES packages(id)

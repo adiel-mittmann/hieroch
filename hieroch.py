@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*- 
+
 import sys
 import datetime, time
 import cio
@@ -52,6 +54,32 @@ class cli:
             self.view_prices_for_package(1)
         elif cmd == "x":
             self.view_prices(1)
+        elif cmd == "ds":
+            self.delete_last_store(1)
+        elif cmd == "db":
+            self.delete_last_brand(1)
+        elif cmd == "dr":
+            self.delete_last_product(1)
+        elif cmd == "dp":
+            self.delete_last_package(1)
+        elif cmd == "dc":
+            self.delete_last_price(1)
+        elif cmd == "vhs":
+            self.view_hidden_stores(1)
+        elif cmd == "vhb":
+            self.view_hidden_brands(1)
+        elif cmd == "vhr":
+            self.view_hidden_products(1)
+        elif cmd == "vhp":
+            self.view_hidden_packages(1)
+        elif cmd == "hs":
+            self.hide_store(1)
+        elif cmd == "hb":
+            self.hide_brand(1)
+        elif cmd == "hp":
+            self.hide_package(1)
+        elif cmd == "hr":
+            self.hide_product(1)
         elif cmd == "check":
             self.run_checks()
         elif cmd == "q":
@@ -66,7 +94,86 @@ class cli:
         return self.store_id
 
     def run_checks(self):
-        return self.db.run_checks()
+
+        def multiply(s, package_unit):
+            s = s.decode('utf8') + " "
+            if s.find(u"×") == -1:
+                return None
+            i = 0
+            a = 0
+            nums = []
+            snum = ""
+            sunit = ""
+            while i < len(s):
+                c = s[i]
+                if   a == 0:
+                    if   c >= '0' and c <= '9':
+                        snum = c
+                        sunit = ""
+                        a = 1
+                elif a == 1:
+                    if   c == " ":
+                        nums.append([snum, sunit])
+                        a = 0
+                    else:
+                        if (c >= '0' and c <= '9') or c == '.':
+                            snum += c
+                        else:
+                            sunit += c
+                i += 1
+            if len(nums) > 1:
+                value = 1.0
+                for num, unit in nums:
+                    if   unit == "u" or unit == package_unit or (unit + "2") == package_unit:
+                        value *= float(num)
+                    elif unit == "cm" and (package_unit == "m" or package_unit == "m2"):
+                        value *= float(num) / 100.0
+                    else:
+                        raise Exception("Don't know what to do with units: %s and %s." % (unit, package_unit))
+                return value
+            else:
+                return None
+
+        packages = self.db.get_all_packages()
+        for package in packages:
+            if package['barcode']:
+                if not model.is_barcode_valid(package['barcode']):
+                    self.cio.writeln("Invalid barcode for package %d: %s" % (package['id'], package['barcode']))
+
+        packages = self.db.get_all_packages()
+        for package in packages:
+            unit = model.unit_by_no(self.db.get_product_by_id(package['product_id'])['unit'])
+            value = multiply(package['extra'], unit)
+            if value != None:
+                if value != package['amount']:
+                    self.cio.writeln("Suspect amount:")
+                    self.cio.writeln(self.format_package(package, verbose = True))
+
+        prices = self.db.get_all_prices()
+        for i in range(len(prices)):
+            if prices[i]['sic'] == 1:
+                continue
+            if i > 0:
+                same = ['origin', 'store_id', 'price', 'package_id', 'date']
+                count = 0
+                for attr in same:
+                    if prices[i][attr] == prices[i - 1][attr]:
+                        count += 1
+                if count > 3:
+                    self.cio.writeln("{0} // {1}".format(prices[i - 1]['id'], prices[i]['id']))
+                    for attr in same:
+                        if prices[i][attr] != prices[i - 1][attr]:
+                            if attr == 'package_id':
+                                pkg1 = self.db.get_package_by_id(prices[i - 1]['package_id'])
+                                pkg2 = self.db.get_package_by_id(prices[i    ]['package_id'])
+                                self.cio.writeln("package:")
+                                self.cio.writeln("        " + self.format_package(pkg1, verbose = True))
+                                self.cio.writeln("        --")
+                                self.cio.writeln("        " + self.format_package(pkg2, verbose = True))
+                            else:
+                                pkg = self.db.get_package_by_id(prices[i]['package_id'])
+                                self.cio.writeln("        " + self.format_package(pkg, verbose = True))
+                                self.cio.writeln("{0}: {1} -- {2}".format(attr, prices[i - 1][attr], prices[i][attr]))
 
     def ensure_store(self, level):
         if self.store_id != None:
@@ -117,7 +224,7 @@ class cli:
             self.cio.print_status(level, brand['name'])
         return brand
 
-    def format_package(self, package, product = None):
+    def format_package(self, package, product = None, verbose = False):
         if product == None:
             product = self.db.get_product_by_id(package['product_id'])
 
@@ -125,10 +232,15 @@ class cli:
         if package['brand_id'] != 0:
             brand_name = self.db.get_brand_by_id(package['brand_id'])['name']
 
-        return self.format_package_raw(product['name'], product['extra'], package['extra'], brand_name, package['amount'], product['unit'])
+        if verbose:
+            return self.format_package_raw(product['name'], product['extra'], package['extra'], brand_name, package['amount'], product['unit'], package['id'], product['id'], package['barcode'])
+        else:
+            return self.format_package_raw(product['name'], product['extra'], package['extra'], brand_name, package['amount'], product['unit'])
 
-    def format_package_raw(self, product_name, product_extra, package_extra, brand_name, package_amount, product_unit):
+    def format_package_raw(self, product_name, product_extra, package_extra, brand_name, package_amount, product_unit, package_id = None, product_id = None, package_barcode = None):
         s = product_name
+        if product_id != None:
+            s += " (" + str(product_id) + ")"
         if product_extra != "":
             s = s + " " + product_extra
         if package_extra != "":
@@ -136,6 +248,10 @@ class cli:
         if brand_name != "":
             s = s + " " + brand_name
         s = s + " " + str(package_amount) + "" +  model.unit_by_no(product_unit)
+        if package_id != None:
+            s += " (" + str(package_id) + ")"
+        if package_barcode != None:
+            s += " -- " + str(package_barcode)
 
         return s
 
@@ -257,7 +373,9 @@ class cli:
         self.cio.print_status(level, "Today is %s." % (self.today,))
         return self.today
 
-    def print_price(self, price):
+    def format_price(self, price, discarded_count = 0):
+        s = ""
+
         rate = price['price'] / 100.0 / price['package_amount']
         unit_spec = model.unit_by_no(price['product_unit'])
         if  unit_spec == 'g':
@@ -271,7 +389,20 @@ class cli:
             rate = rate * 1000
         rate = "{0:03.2f}/{1}".format(rate, unit_spec)
         spec = self.format_package_raw(price['product_name'], price['product_extra'], price['package_extra'], price['brand_name'], price['package_amount'], price['product_unit'])
-        
+
+        ago = (datetime.date.today() - price['date']).days
+        if   ago < 30:
+            ago = "{0:>3}d".format(ago)
+        elif ago < 365:
+            ago = "{0:02.1f}m".format(ago / 30.0)
+        else:
+            ago = "{0:02.1f}y".format(ago / 365.0)
+
+        s += "{0:>3} {1:<8} {2:>3} {3:<13} {4}".format(discarded_count, rate, ago, price['store_name'], spec)
+
+        return s
+
+    def print_price(self, price, discarded_count):
         if 'highlight' in price:
             if 'good' in price:
                 self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_CYAN, self.cio.COLOR_BLACK)
@@ -279,11 +410,8 @@ class cli:
                 self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_BLUE, self.cio.COLOR_BLACK)
         elif 'price' in price:
             self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
-
-        self.cio.write("{0:<8} {1:>3}d {2:<13} {3}".format(rate, (datetime.date.today() - price['date']).days, price['store_name'], spec))
-
+        self.cio.write(self.format_price(price, discarded_count))
         self.cio.text_color(self.cio.ATTR_RESET, self.cio.COLOR_WHITE, self.cio.COLOR_BLACK)
-
         self.cio.write("\n")
 
     def print_best_price_summary(self, prices, highlight_id = None):
@@ -304,10 +432,15 @@ class cli:
                 append = True
             packages.add(price['package_id'])
             if append:
-                selected.append(price)
+                selected.append([price, 0])
+            else:
+                selected[-1][1] += 1
 
-        for price in reversed(selected):
-            self.print_price(price)
+        for price, discarded_count in reversed(selected):
+            self.print_price(price, discarded_count)
+
+#            self.cio.text_color(self.cio.ATTR_BRIGHT, self.cio.COLOR_GREEN, self.cio.COLOR_BLACK)
+#        self.cio.write("{0:<8} {1:>3}d {2:<13} {3}".format(rate, (datetime.date.today() - price['date']).days, price['store_name'], spec))
 
     def view_prices_for_package(self, level):
         package = self.choose_package(level)
@@ -331,5 +464,74 @@ class cli:
 
         prices = self.db.get_prices_with_filter(filter_specs)
         self.print_best_price_summary(prices)
+
+    def delete_last_store(self, level):
+        rows = self.db.get_recent_stores(10)
+        row = self.choose(level, rows, lambda r: r['name'], False, False)
+        self.db.delete_store(row['id'])
+
+    def delete_last_brand(self, level):
+        rows = self.db.get_recent_brands(10)
+        row = self.choose(level, rows, lambda r: r['name'], False, False)
+        self.db.delete_brand(row['id'])
+
+    def delete_last_product(self, level):
+        rows = self.db.get_recent_products(10)
+        row = self.choose(level, rows, self.format_product, False, False)
+        self.db.delete_product(row['id'])
+
+    def delete_last_package(self, level):
+        rows = self.db.get_recent_packages(10)
+        row = self.choose(level, rows, self.format_package, False, False)
+        self.db.delete_package(row['id'])
+
+    def delete_last_price(self, level):
+        rows = self.db.get_prices_with_filter(None, "id", 10)
+        row = self.choose(level, rows, self.format_price, False, False)
+        self.db.delete_price(row['id'])
+
+    def hide_store(self, level):
+        self.cio.print_status(level, "Hiding/unhiding store.")
+        store = self.choose_store(level, new = False)
+        self.db.toggle_hide_store(store['id'])
+
+    def hide_brand(self, level):
+        self.cio.print_status(level, "Hiding/unhiding brand.")
+        brand = self.choose_brand(level, new = False)
+        self.db.toggle_hide_brand(brand['id'])
+
+    def hide_package(self, level):
+        self.cio.print_status(level, "Hiding/unhiding package.")
+        package = self.choose_package(level, new = False)
+        self.db.toggle_hide_package(package['id'])
         
+    def hide_product(self, level):
+        self.cio.print_status(level, "Hiding/unhiding product.")
+        product = self.choose_product(level, new = False)
+        self.db.toggle_hide_product(product['id'])
+
+    def view_hidden_stores(self, level):
+        self.cio.print_status(level, "Viewing hidden stores.")
+        rows = self.db.get_hidden_stores()
+        for row in rows:
+            self.cio.writeln(row['name'], level)
+
+    def view_hidden_brands(self, level):
+        self.cio.print_status(level, "Viewing hidden brands.")
+        rows = self.db.get_hidden_brands()
+        for row in rows:
+            self.cio.writeln(row['name'], level)
+
+    def view_hidden_products(self, level):
+        self.cio.print_status(level, "Viewing hidden products.")
+        rows = self.db.get_hidden_products()
+        for row in rows:
+            self.cio.writeln(self.format_product(row), level)
+
+    def view_hidden_packages(self, level):
+        self.cio.print_status(level, "Viewing hidden packages.")
+        rows = self.db.get_hidden_packages()
+        for row in rows:
+            self.cio.writeln(self.format_package(row), level)
+
 cli().run()
