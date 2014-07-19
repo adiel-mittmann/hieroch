@@ -185,7 +185,7 @@ class cli:
         if len(items) == 1:
             return items[0]
 
-        for i in range(len(items)):
+        for i in reversed(range(len(items))):
             self.cio.writeln(("%d. " % (i + 1)) + format(items[i]), level)
         while True:
             n = self.cio.read_integer(level, "Choose.", new = new, previous = previous)
@@ -263,7 +263,7 @@ class cli:
 
     def choose_package(self, level, null = False, new = False, previous = False):
         def fetch_packages(pattern):
-            return self.db.get_package_by_barcode(pattern) + self.db.get_package_by_product_name(pattern)
+            return self.db.get_package_by_barcode(pattern) + self.db.get_package_by_product_name_or_extra(pattern)
 
         package = self.choose_record(level, "~Bar code/~Product name.", self.add_package, fetch_packages, self.format_package, null = null, new = new, previous = previous)
         if package != None:

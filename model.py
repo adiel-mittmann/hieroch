@@ -140,8 +140,8 @@ class Database:
     def insert_price(self, store_id, package_id, price, date, origin_no):
         return self.generic_insert('prices', self.PRICE_COLUMNS, (store_id, package_id, price, date, origin_no, None))
 
-    def get_package_by_product_name(self, pattern):
-        rows = self.cursor.execute('SELECT ' + self.make_column_list(self.PACKAGE_COLUMNS, 'packages') + ' FROM packages JOIN products ON packages.product_id = products.id WHERE products.name LIKE ?', ('%%%s%%' % pattern,)).fetchall()
+    def get_package_by_product_name_or_extra(self, pattern):
+        rows = self.cursor.execute('SELECT ' + self.make_column_list(self.PACKAGE_COLUMNS, 'packages') + ' FROM (packages JOIN products ON packages.product_id = products.id) JOIN prices ON packages.id = prices.package_id WHERE (products.name LIKE ?) OR (products.extra LIKE ?) GROUP BY packages.id ORDER BY COUNT(prices.id) DESC', ('%%%s%%' % pattern, '%%%s%%' % pattern)).fetchall()
         return [self.make_object(self.PACKAGE_COLUMNS, row) for row in rows]
 
     def get_packages_by_product_id(self, product_id):
